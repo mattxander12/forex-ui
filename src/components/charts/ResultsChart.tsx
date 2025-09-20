@@ -13,13 +13,22 @@ import {
 } from 'recharts';
 
 
+function formatCompact(n: number): string {
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    if (abs >= 1_000_000_000) return sign + (abs / 1_000_000_000).toFixed(abs >= 10_000_000_000 ? 0 : 1) + 'B';
+    if (abs >= 1_000_000) return sign + (abs / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1) + 'M';
+    if (abs >= 1_000) return sign + (abs / 1_000).toFixed(abs >= 10_000 ? 0 : 1) + 'K';
+    return sign + (abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(2));
+}
+
 export default function ResultsChart({
     data,
-    xLabel = 'Trade Number',
+    xLabel = 'Month/Year',
     yLeftLabel = 'Equity (R)',
     yRightLabel = 'Balance / P/L',
 }: {
-    data: { i: number | string; equityR: number; balance?: number; pnl?: number }[];
+    data: { xTs: number; equityR: number; balance?: number; pnl?: number }[];
     xLabel?: string;
     yLeftLabel?: string;
     yRightLabel?: string;
@@ -28,13 +37,47 @@ export default function ResultsChart({
     const hasBalance = Array.isArray(data) && data.some(d => typeof d.balance === 'number' && !Number.isNaN(d.balance));
     const hasPnL = Array.isArray(data) && data.some(d => typeof d.pnl === 'number' && !Number.isNaN(d.pnl));
 
+    // Build monthly ticks from data range
+    const times = data.map(d => d.xTs).filter((n) => Number.isFinite(n));
+    const minTs = times.length ? Math.min(...times) : Date.now();
+    const maxTs = times.length ? Math.max(...times) : minTs;
+    // start at first day of month UTC
+    const start = new Date(minTs);
+    const startMonth = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1);
+    const end = new Date(maxTs);
+    // include last month boundary; add one month to ensure final month tick shows even if data is mid-month
+    const endBoundary = Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + 1, 1);
+    const ticks: number[] = [];
+    for (let t = startMonth; t <= endBoundary; ) {
+        ticks.push(t);
+        const d = new Date(t);
+        const next = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+        if (next === t) break; // safety
+        t = next;
+    }
+
     return (
-        <div style={{ width: '100%', height: 420 }}>
+        <div style={{ width: '100%', height: 440 }}>
+            {/* Increase height slightly to make room for legend without overlap */}
             <ResponsiveContainer>
                 <LineChart data={data} margin={{ top: 10, right: 20, bottom: 30, left: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={true} />
 
-                    <XAxis dataKey="i" tick={{ fontSize: 12 }}>
+                    <XAxis
+                        dataKey="xTs"
+                        type="number"
+                        scale="time"
+                        domain={[startMonth, Math.max(endBoundary, startMonth)]}
+                        ticks={ticks}
+                        interval={0}
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(ts: number) => {
+                            const d = new Date(ts);
+                            const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+                            const yy = String(d.getUTCFullYear()).slice(-2);
+                            return `${mm}/${yy}`;
+                        }}
+                    >
                         <Label value={xLabel} position="insideBottom" offset={-5} />
                     </XAxis>
 
@@ -45,7 +88,7 @@ export default function ResultsChart({
 
                     {/* Right axis for Balance / PnL, only if present */}
                     {(hasBalance || hasPnL) && (
-                        <YAxis yAxisId="right" orientation="right" width={70} tick={{ fontSize: 12 }}>
+                        <YAxis yAxisId="right" orientation="right" width={70} tick={{ fontSize: 12 }} tickFormatter={(v: number) => formatCompact(v)}>
                             <Label value={yRightLabel} angle={-90} position="insideRight" offset={10} />
                         </YAxis>
                     )}
@@ -59,21 +102,33 @@ export default function ResultsChart({
                                 return val;
                             };
                             if (name === 'equityR') return [formatNumber(value), 'Equity (R-multiples)'];
-                            if (name === 'balance') return [formatNumber(value), 'Balance'];
-                            if (name === 'pnl') return [formatNumber(value), 'P/L'];
+                            if (name === 'balance') return [typeof value === 'number' ? formatCompact(value) : String(value), 'Balance'];
+                            if (name === 'pnl') return [typeof value === 'number' ? formatCompact(value) : String(value), 'P/L'];
                             return [formatNumber(value), name];
                         }}
-                        labelFormatter={(label) => `Trade ${label}`}
+                        labelFormatter={(label) => {
+                            const ts = typeof label === 'number' ? label : Number(label);
+                            if (!Number.isFinite(ts)) return String(label);
+                            const d = new Date(ts);
+                            const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+                            const yy = String(d.getUTCFullYear()).slice(-2);
+                            return `${mm}/${yy}`;
+                        }}
                         labelStyle={{ color: '#000000' }}
                         itemStyle={{ fontWeight: 600 }}
                     />
-                    <Legend />
+                    <Legend verticalAlign="bottom" align="left" wrapperStyle={{ paddingTop: 8 }} iconType="circle" iconSize={10} formatter={(value: string) => {
+                        if (value === 'equityR') return 'Equity (R)';
+                        if (value === 'balance') return 'Balance';
+                        if (value === 'pnl') return 'P/L';
+                        return value;
+                    }} />
 
                     {/* Equity line (always plotted) */}
                     <Line
                         type="monotone"
                         dataKey="equityR"
-                        name="Equity (R-multiples)"
+                        name="Equity (R)"
                         yAxisId="left"
                         dot={false}
                         connectNulls

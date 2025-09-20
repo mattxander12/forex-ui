@@ -26,7 +26,10 @@ export function formatCurrency(value: number, currency: string = "USD"): string 
  */
 export function formatPercent(value: number | undefined, digits: number = 2): string {
     if (value === undefined || value === null) return "–";
-    return `${value.toFixed(digits)}%`;
+    if (!Number.isFinite(value)) return "–";
+    // Auto-scale fractional inputs (e.g., 0.54 -> 54%) while preserving already-percentage inputs (e.g., 54)
+    const scaled = Math.abs(value) <= 1 ? value * 100 : value;
+    return `${scaled.toFixed(digits)}%`;
 }
 
 /**

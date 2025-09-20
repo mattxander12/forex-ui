@@ -8,6 +8,8 @@ import {BacktestResult} from "@/types/backtest";
 
 interface Run {
     timestamp: string;
+    jobId?: string;
+    backtestYears?: number;
     config: Config;
     result?: BacktestResult;
 }
@@ -16,8 +18,36 @@ export default function HistoryPage() {
     const [runs, setRuns] = useState<Run[]>([]);
 
     useEffect(() => {
-        const history = JSON.parse(localStorage.getItem("backtestHistory") || "[]");
-        setRuns(history);
+        function readHistory() {
+            try {
+                const raw = localStorage.getItem("backtestHistory");
+                if (!raw) {
+                    setRuns([]);
+                    return;
+                }
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    setRuns(parsed);
+                } else {
+                    setRuns([]);
+                }
+            } catch {
+                setRuns([]);
+            }
+        }
+        readHistory();
+        const onStorage = (e: StorageEvent) => {
+            if (e.key === "backtestHistory") readHistory();
+        };
+        const onFocus = () => readHistory();
+        window.addEventListener('storage', onStorage);
+        window.addEventListener('focus', onFocus);
+        document.addEventListener('visibilitychange', onFocus);
+        return () => {
+            window.removeEventListener('storage', onStorage);
+            window.removeEventListener('focus', onFocus);
+            document.removeEventListener('visibilitychange', onFocus);
+        };
     }, []);
 
     // Handler to clear history
@@ -66,6 +96,16 @@ export default function HistoryPage() {
                                                 {formatDate(run.timestamp)}
                                             </span>
                                             <div className="mt-2 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap gap-4 items-center">
+                                                {run.jobId && (
+                                                    <span>
+                                                        <strong>Job ID:</strong> {run.jobId}
+                                                    </span>
+                                                )}
+                                                {run.backtestYears && (
+                                                    <span>
+                                                        <strong>Backtest Years:</strong> {run.backtestYears}
+                                                    </span>
+                                                )}
                                                 {run.config?.trading?.instrument && (
                                                     <span>
                                                         <strong>Instrument:</strong> {run.config.trading.instrument}
@@ -76,9 +116,14 @@ export default function HistoryPage() {
                                                         <strong>Granularity:</strong> {run.config.trading.granularity}
                                                     </span>
                                                 )}
-                                                {run.config?.account?.startingBalance !== undefined && (
+                                                {run.config?.paper?.startBalance !== undefined && (
                                                     <span>
-                                                        <strong>Start:</strong> {formatCurrency(run.config.account.startingBalance)}
+                                                        <strong>Start:</strong> {formatCurrency(run.config.paper.startBalance)}
+                                                    </span>
+                                                )}
+                                                {run.result?.endBalance !== undefined && (
+                                                    <span>
+                                                        <strong>End:</strong> {formatCurrency(run.result.endBalance)}
                                                     </span>
                                                 )}
                                             </div>

@@ -17,12 +17,8 @@ export type Config = {
         risk: number;
         maxOpenPerInstrument: number;
         leverage: number;
-        stopAtrMult: number;
-    };
-    /** Optional account settings */
-    account?: {
-        /** Starting cash balance used for P&amp;L simulation */
-        startingBalance: number;
+        stopAtrMulti: number;
+        startBalance: number;
     };
     /** Optional fine‑tuning knobs (safe defaults used if undefined) */
     training?: {
@@ -31,15 +27,9 @@ export type Config = {
         /** Portion of data used for validation (0.2 = 20%) */
         valSplit: number;
         /** Model to train server‑side */
-        model: 'SGD' | 'Tree' | 'RF';
+        model: 'XGBOOST' | 'Tree' | 'RF';
         /** Label horizon H (bars) used for outcome labeling */
         labelH: number;
-    };
-    marketData?: {
-        /** Extra candles used to compute indicators (beyond warmup) */
-        lookback: number;
-        /** ATR stop multiplier when mode=ATR */
-        atrMult: number;
     };
     execution?: {
         /** Only take trades if model confidence ≥ threshold (0..1) */
@@ -64,14 +54,10 @@ export type Config = {
         atrWindow: number;
         /** ATR percentile threshold (0..100) */
         atrPercentile: number;
-        /** Session window in UTC, e.g. "13:00-17:00Z" */
-        session: string;
         /** RSI threshold for longs (e.g., 55) */
         rsiLong: number;
         /** RSI threshold for shorts (e.g., 45) */
         rsiShort: number;
-        /** Enforce at most one trade per UTC day */
-        onePerDay?: boolean;
     };
 };
 
@@ -81,40 +67,34 @@ export const DEFAULTS: FullConfig = {
     trading: {
         instrument: 'USD_JPY',
         granularity: 'M5',
-        fastSma: 12,         // was 10
-        slowSma: 48,         // was 30
-        warmup: 15,          // was 50
-        maxSpreadPips: 1.2,
-        maType: 'EMA',       // was 'SMA'
+        fastSma: 20,
+        slowSma: 50,
+        warmup: 40,
+        maxSpreadPips: 1.0,
+        maType: 'EMA',
     },
     paper: {
         enabled: true,
         mode: 'ATR',
         atrPeriod: 14,
         pips: 10,
-        rr: 2.0,             // was 1.4
-        risk: 1.0,
+        rr: 2.0,
+        risk: 1,
         maxOpenPerInstrument: 1,
         leverage: 50,
-        stopAtrMult: 10,
-    },
-    account: {
-        startingBalance: 10000,
+        stopAtrMulti: 1,
+        startBalance: 10000,
     },
     training: {
         years: 1,
         valSplit: 0.2,
-        model: 'SGD',
-        labelH: 10,
-    },
-    marketData: {
-        lookback: 0,
-        atrMult: 2.0,        // keep
+        model: 'XGBOOST',
+        labelH: 20,
     },
     execution: {
-        signalThreshold: 0.55, // keep
+        signalThreshold: 0.55,
         slippagePips: 0.2,
-        commissionPips: 0.0,
+        commissionPips: 0,
     },
     risk: {
         maxDailyLossR: 3,
@@ -125,9 +105,7 @@ export const DEFAULTS: FullConfig = {
         evMarginR: 0.30,
         atrWindow: 20,
         atrPercentile: 30,
-        session: '08:00-18:00Z',
         rsiLong: 60,
-        rsiShort: 40,
-        onePerDay: true,
+        rsiShort: 40
     },
 };

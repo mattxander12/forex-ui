@@ -75,7 +75,7 @@ export default function BacktestResults({ result, chartData, className }: { resu
             </dl>
 
             <div className="border-t pt-6">
-                <ResultsChart data={chartData} xLabel="Trade Number" yLeftLabel="Equity (R)" />
+                <ResultsChart data={chartData} xLabel="Month/Year" yLeftLabel="Equity (R)" />
             </div>
         </div>
     );

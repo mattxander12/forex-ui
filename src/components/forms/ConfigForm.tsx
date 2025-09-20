@@ -17,10 +17,11 @@ export interface ConfigFormProps {
     className?: string;
     busy?: { training: boolean; backtesting: boolean };
     runId: number;
+    onBacktestYearsChange?: (years: number) => void;
 }
 
 export default function ConfigForm({
-    value, onChangeAction, onTrain, onBacktest, className, busy, runId
+    value, onChangeAction, onTrain, onBacktest, className, busy, runId, onBacktestYearsChange
 }: ConfigFormProps) {
     const rootClass = clsx(
         "max-w-5xl mx-auto mt-10 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 md:p-8",
@@ -35,9 +36,8 @@ export default function ConfigForm({
             ...cfg,
             trading: {...cfg.trading},
             paper: {...cfg.paper},
-            account: {...cfg.account},
             training: {...cfg.training},
-            marketData: {...cfg.marketData},
+            // marketData removed
             execution: {...cfg.execution},
             risk: {...cfg.risk},
             filter: {...cfg.filter},
@@ -61,9 +61,57 @@ export default function ConfigForm({
                 </p>
             </header>
 
-            {/* MARKET SETUP */}
+            {/* TRAINING: Data & Model */}
             <details open>
                 <summary className="mb-3 flex items-center justify-between cursor-pointer select-none">
+                    <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">Training: Data & Model</span>
+                    <span className="h-px flex-1 ml-4 bg-slate-200 dark:bg-slate-700"/>
+                </summary>
+                <div className="grid md:grid-cols-3 gap-4">
+                    <NumberInput
+                                 label="Training Years"
+                                 hint="History length to pull when training via UI"
+                                 value={cfg.training.years}
+                                 onChangeAction={(v) => update(c => {
+                                     c.training = c.training ?? { years: 1, valSplit: 0.2, model: 'RF', labelH: 10 };
+                                     c.training.years = v;
+                                 })}
+                    />
+                    <NumberInput
+                                 step={0.05}
+                                 label="Validation Split"
+                                 hint="Hold‑out fraction for validation, 0..0.8"
+                                 value={cfg.training.valSplit}
+                                 onChangeAction={(v) => update(c => {
+                                     c.training = c.training ?? { years: 1, valSplit: 0.2, model: 'RF', labelH: 10 };
+                                     c.training.valSplit = v;
+                                 })}
+                    />
+                    <Select
+                            label="Model"
+                            hint="Select server‑side learner"
+                            value={cfg.training.model}
+                            options={["XGBOOST", "Tree", "RF"]}
+                            onChangeAction={(v) => update(c => {
+                                c.training = c.training ?? { years: 1, valSplit: 0.2, model: 'RF', labelH: 10 };
+                                c.training.model = v as 'XGBOOST' | 'Tree' | 'RF';
+                            })}
+                    />
+                    <NumberInput
+                                 label="Label Horizon (H)"
+                                 hint="Bars used to resolve win/lose in labeling"
+                                 value={cfg.training.labelH}
+                                 onChangeAction={(v) => update(c => {
+                                     c.training = c.training ?? { years: 1, valSplit: 0.2, model: 'RF', labelH: 10 };
+                                     c.training.labelH = v;
+                                 })}
+                    />
+                </div>
+            </details>
+
+            {/* MARKET SETUP */}
+            <details>
+                <summary className="mb-3 flex items-center justify-between mt-10 cursor-pointer select-none">
                     <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">Market Setup</span>
                     <span className="h-px flex-1 ml-4 bg-slate-200 dark:bg-slate-700"/>
                 </summary>
@@ -74,28 +122,13 @@ export default function ConfigForm({
                     <Select label="Granularity" hint="Candle timeframe (OANDA)" value={cfg.trading.granularity}
                             options={['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D']}
                             onChangeAction={(v) => update(c => c.trading.granularity = v)}/>
-                    <NumberInput label="Warmup" hint="Bars to stabilize indicators before training/backtest"
-                                 value={cfg.trading.warmup}
-                                 onChangeAction={(v) => update(c => c.trading.warmup = v)}/>
-                    <NumberInput label="Fast MA" hint="Short moving average period used as a feature"
-                                 value={cfg.trading.fastSma}
-                                 onChangeAction={(v) => update(c => c.trading.fastSma = v)}/>
-                    <NumberInput label="Slow MA" hint="Long moving average period used as a feature"
-                                 value={cfg.trading.slowSma}
-                                 onChangeAction={(v) => update(c => c.trading.slowSma = v)}/>
-                    <Select label="MA Type" hint="Affects features & regime filters" value={cfg.trading.maType}
-                            options={['SMA', 'EMA', 'HYBRID']}
-                            onChangeAction={(v) => update(c => c.trading.maType = v as 'SMA' | 'EMA' | 'HYBRID')}/>
-                    <NumberInput label="Max Spread (pips)" hint="Skip trades when current spread exceeds this value"
-                                 step={0.1} value={cfg.trading.maxSpreadPips}
-                                 onChangeAction={(v) => update(c => c.trading.maxSpreadPips = v)}/>
                 </div>
             </details>
 
-            {/* RISK & POSITION SIZING */}
+            {/* EXECUTION: Sizing & Costs */}
             <details open>
                 <summary className="mb-3 flex items-center justify-between mt-10 cursor-pointer select-none">
-                    <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">Risk &amp; Position Sizing</span>
+                    <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">Execution: Sizing & Costs</span>
                     <span className="h-px flex-1 ml-4 bg-slate-200 dark:bg-slate-700"/>
                 </summary>
                 <div className="grid md:grid-cols-3 gap-4">
@@ -114,8 +147,8 @@ export default function ConfigForm({
                         label="Stop ATR Multiplier"
                         hint="Stop distance = ATR × multiplier"
                         step={0.1}
-                        value={cfg.paper.stopAtrMult}
-                        onChangeAction={(v) => update(c => c.paper.stopAtrMult = v)}
+                        value={cfg.paper.stopAtrMulti}
+                        onChangeAction={(v) => update(c => c.paper.stopAtrMulti = v)}
                     />
                     <NumberInput label="Risk/Reward" hint="Take‑profit distance = R × stop distance" step={0.1}
                                  value={cfg.paper.rr}
@@ -137,65 +170,44 @@ export default function ConfigForm({
                         label="Starting Balance ($)"
                         hint="Used to simulate cash P&amp;L on the chart"
                         step={100}
-                        value={cfg.account.startingBalance}
+                        value={cfg.paper.startBalance}
                         onChangeAction={(v) => update(c => {
-                            c.account = c.account ?? {startingBalance: 10000};
-                            c.account.startingBalance = v;
+                            c.paper = c.paper ?? {startBalance: 10000};
+                            c.paper.startBalance = v;
                         })}
                     />
                 </div>
             </details>
 
-            {/* TRAINING PARAMETERS */}
+            {/* FEATURES & Indicators */}
             <details>
                 <summary className="mb-3 flex items-center justify-between mt-10 cursor-pointer select-none">
-                    <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">Training Parameters</span>
+                    <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">Features & Indicators</span>
                     <span className="h-px flex-1 ml-4 bg-slate-200 dark:bg-slate-700"/>
                 </summary>
                 <div className="grid md:grid-cols-3 gap-4">
-                    <NumberInput label="Training Years" hint="History length to pull when training via UI"
-                                 value={cfg.training.years}
-                                 onChangeAction={(v) => update(c => {
-                                     c.training = c.training ?? {years: 1, valSplit: 0.2, model: 'SGD', labelH: 10};
-                                     c.training.years = v;
-                                 })}/>
-                    <NumberInput step={0.05} label="Validation Split" hint="Hold‑out fraction for validation, 0..0.8"
-                                 value={cfg.training.valSplit}
-                                 onChangeAction={(v) => update(c => {
-                                     c.training = c.training ?? {years: 1, valSplit: 0.2, model: 'SGD', labelH: 10};
-                                     c.training.valSplit = v;
-                                 })}/>
-                    <Select label="Model" hint="Select server‑side learner"
-                            value={cfg.training.model} options={["SGD", "Tree", "RF"]}
-                            onChangeAction={(v) => update(c => {
-                                c.training = c.training ?? {years: 1, valSplit: 0.2, model: 'SGD', labelH: 10};
-                                c.training.model = v as 'SGD' | 'Tree' | 'RF';
-                            })}/>
-                    <NumberInput label="Label Horizon (H)" hint="Bars used to resolve win/lose in labeling"
-                                 value={cfg.training.labelH}
-                                 onChangeAction={(v) => update(c => {
-                                     c.training = c.training ?? {years: 1, valSplit: 0.2, model: 'SGD', labelH: 10};
-                                     c.training.labelH = v;
-                                 })}/>
-                    <NumberInput label="Extra Lookback" hint="Additional bars fetched to compute indicators"
-                                 value={cfg.marketData.lookback}
-                                 onChangeAction={(v) => update(c => {
-                                     c.marketData = c.marketData ?? {lookback: 0, atrMult: 1.0};
-                                     c.marketData.lookback = v;
-                                 })}/>
-                    <NumberInput step={0.1} label="ATR Multiplier"
-                                 hint="Stop distance = ATR × multiplier (when mode=ATR)" value={cfg.marketData.atrMult}
-                                 onChangeAction={(v) => update(c => {
-                                     c.marketData = c.marketData ?? {lookback: 0, atrMult: 1.0};
-                                     c.marketData.atrMult = v;
-                                 })}/>
+                    <NumberInput label="Warmup" hint="Bars to stabilize indicators before training/backtest"
+                                 value={cfg.trading.warmup}
+                                 onChangeAction={(v) => update(c => c.trading.warmup = v)}/>
+                    <NumberInput label="Fast MA" hint="Short moving average period used as a feature"
+                                 value={cfg.trading.fastSma}
+                                 onChangeAction={(v) => update(c => c.trading.fastSma = v)}/>
+                    <NumberInput label="Slow MA" hint="Long moving average period used as a feature"
+                                 value={cfg.trading.slowSma}
+                                 onChangeAction={(v) => update(c => c.trading.slowSma = v)}/>
+                    <Select label="MA Type" hint="Affects features & regime filters" value={cfg.trading.maType}
+                            options={['SMA', 'EMA', 'HYBRID']}
+                            onChangeAction={(v) => update(c => c.trading.maType = v as 'SMA' | 'EMA' | 'HYBRID')}/>
+                    <NumberInput label="Max Spread (pips)" hint="Skip trades when current spread exceeds this value"
+                                 step={0.1} value={cfg.trading.maxSpreadPips}
+                                 onChangeAction={(v) => update(c => c.trading.maxSpreadPips = v)}/>
                 </div>
             </details>
 
-            {/* EXECUTION PARAMETERS */}
+            {/* EXECUTION: Signals & Costs */}
             <details>
                 <summary className="mb-3 flex items-center justify-between mt-10 cursor-pointer select-none">
-                    <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">Execution Parameters</span>
+                    <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">Execution: Signals & Costs</span>
                     <span className="h-px flex-1 ml-4 bg-slate-200 dark:bg-slate-700"/>
                 </summary>
                 <div className="grid md:grid-cols-3 gap-4">
@@ -233,10 +245,10 @@ export default function ConfigForm({
                 </div>
             </details>
 
-            {/* RISK CONTROLS */}
+            {/* EXECUTION: Risk Controls */}
             <details>
                 <summary className="mb-3 flex items-center justify-between mt-10 cursor-pointer select-none">
-                    <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">Risk Controls</span>
+                    <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">Execution: Risk Controls</span>
                     <span className="h-px flex-1 ml-4 bg-slate-200 dark:bg-slate-700"/>
                 </summary>
                 <div className="grid md:grid-cols-3 gap-4">
@@ -255,10 +267,10 @@ export default function ConfigForm({
                 </div>
             </details>
 
-            {/* EXECUTION FILTERS */}
+            {/* EXECUTION: Filters */}
             <details>
                 <summary className="mb-3 flex items-center justify-between mt-10 cursor-pointer select-none">
-                    <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">Execution Filters</span>
+                    <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">Execution: Filters</span>
                     <span className="h-px flex-1 ml-4 bg-slate-200 dark:bg-slate-700"/>
                 </summary>
                 <div className="grid md:grid-cols-3 gap-4">
@@ -270,10 +282,8 @@ export default function ConfigForm({
                                          evMarginR: 0.30,
                                          atrWindow: 20,
                                          atrPercentile: 40,
-                                         session: '13:00-17:00Z',
                                          rsiLong: 55,
-                                         rsiShort: 45,
-                                         onePerDay: true
+                                         rsiShort: 45
                                      };
                                      c.filter.evMargin = v;
                                  })}/>
@@ -285,10 +295,8 @@ export default function ConfigForm({
                                          evMarginR: 0.30,
                                          atrWindow: 20,
                                          atrPercentile: 40,
-                                         session: '13:00-17:00Z',
                                          rsiLong: 55,
-                                         rsiShort: 45,
-                                         onePerDay: true
+                                         rsiShort: 45
                                      };
                                      c.filter.evMarginR = v;
                                  })}/>
@@ -299,10 +307,8 @@ export default function ConfigForm({
                                          evMarginR: 0.30,
                                          atrWindow: 20,
                                          atrPercentile: 40,
-                                         session: '13:00-17:00Z',
                                          rsiLong: 55,
-                                         rsiShort: 45,
-                                         onePerDay: true
+                                         rsiShort: 45
                                      };
                                      c.filter.atrWindow = v;
                                  })}/>
@@ -314,27 +320,11 @@ export default function ConfigForm({
                                          evMarginR: 0.30,
                                          atrWindow: 20,
                                          atrPercentile: 40,
-                                         session: '13:00-17:00Z',
                                          rsiLong: 55,
-                                         rsiShort: 45,
-                                         onePerDay: true
+                                         rsiShort: 45
                                      };
                                      c.filter.atrPercentile = v;
                                  })}/>
-                    <Input label="Session (UTC)" hint="e.g., 13:00-17:00Z" value={cfg.filter.session}
-                           onChangeAction={(v) => update(c => {
-                               c.filter = c.filter ?? {
-                                   evMargin: 0.08,
-                                   evMarginR: 0.30,
-                                   atrWindow: 20,
-                                   atrPercentile: 40,
-                                   session: '13:00-17:00Z',
-                                   rsiLong: 55,
-                                   rsiShort: 45,
-                                   onePerDay: true
-                               };
-                               c.filter.session = v;
-                           })}/>
                     <NumberInput step={1} label="RSI Long Threshold" hint="> 55 recommended" value={cfg.filter.rsiLong}
                                  onChangeAction={(v) => update(c => {
                                      c.filter = c.filter ?? {
@@ -342,10 +332,8 @@ export default function ConfigForm({
                                          evMarginR: 0.30,
                                          atrWindow: 20,
                                          atrPercentile: 40,
-                                         session: '13:00-17:00Z',
                                          rsiLong: 55,
-                                         rsiShort: 45,
-                                         onePerDay: true
+                                         rsiShort: 45
                                      };
                                      c.filter.rsiLong = v;
                                  })}/>
@@ -357,28 +345,11 @@ export default function ConfigForm({
                                          evMarginR: 0.30,
                                          atrWindow: 20,
                                          atrPercentile: 40,
-                                         session: '13:00-17:00Z',
                                          rsiLong: 55,
-                                         rsiShort: 45,
-                                         onePerDay: true
+                                         rsiShort: 45
                                      };
                                      c.filter.rsiShort = v;
                                  })}/>
-                    <Toggle label="One Trade Per Day" hint="Enforce at most one entry per UTC date"
-                            value={!!cfg.filter.onePerDay}
-                            onChangeAction={(v) => update(c => {
-                                c.filter = c.filter ?? {
-                                    evMargin: 0.08,
-                                    evMarginR: 0.30,
-                                    atrWindow: 20,
-                                    atrPercentile: 40,
-                                    session: '13:00-17:00Z',
-                                    rsiLong: 55,
-                                    rsiShort: 45,
-                                    onePerDay: true
-                                };
-                                c.filter.onePerDay = v;
-                            })}/>
                 </div>
             </details>
 
@@ -389,7 +360,7 @@ export default function ConfigForm({
                         label="Backtest Years"
                         hint="Number of years for backtest"
                         value={backtestYears}
-                        onChangeAction={(v) => setBacktestYears(Math.max(v, 1))}
+                        onChangeAction={(v) => { const yrs = Math.max(v, 1); setBacktestYears(yrs); onBacktestYearsChange?.(yrs); }}
                         step={1}
                     />
                 </div>

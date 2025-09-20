@@ -1,4 +1,5 @@
 export interface Trade {
+    openedAt: string;
     side: string;
     equityUSD: number;
     equityR: number;
@@ -27,4 +28,5 @@ export interface BacktestResult {
     maxDrawdownR?: number;
     startBalance?: number;
     endBalance?: number;
+    done?: boolean;
 }
