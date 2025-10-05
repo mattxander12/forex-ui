@@ -25,3 +25,14 @@ export async function backtest(config: Config) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
 }
+
+export async function applyConfig(config: Config) {
+    const res = await fetch(`${BASE}/${VERSION}/config/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify(mergeConfig(config)),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+}

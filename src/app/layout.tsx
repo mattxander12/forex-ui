@@ -43,6 +43,21 @@ export default function RootLayout({
                 </Link>
               </li>
               <li>
+                <Link href="/train" className="block px-3 py-2 rounded-lg hover:bg-slate-800 transition-colors font-medium">
+                  Train
+                </Link>
+              </li>
+              <li>
+                <Link href="/backtest" className="block px-3 py-2 rounded-lg hover:bg-slate-800 transition-colors font-medium">
+                  Backtest
+                </Link>
+              </li>
+              <li>
+                <Link href="/live" className="block px-3 py-2 rounded-lg hover:bg-slate-800 transition-colors font-medium">
+                  Mock Live Trading
+                </Link>
+              </li>
+              <li>
                 <Link href="/history" className="block px-3 py-2 rounded-lg hover:bg-slate-800 transition-colors font-medium">
                   History
                 </Link>

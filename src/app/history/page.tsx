@@ -6,7 +6,10 @@ import type { Config } from "@/types/config";
 import { formatDate, formatPercent, formatCurrency } from "@/lib/formatters";
 import {BacktestResult} from "@/types/backtest";
 
+type RunType = 'backtest' | 'mock-live';
+
 interface Run {
+    type: RunType;
     timestamp: string;
     jobId?: string;
     backtestYears?: number;
@@ -20,24 +23,23 @@ export default function HistoryPage() {
     useEffect(() => {
         function readHistory() {
             try {
-                const raw = localStorage.getItem("backtestHistory");
-                if (!raw) {
-                    setRuns([]);
-                    return;
-                }
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) {
-                    setRuns(parsed);
-                } else {
-                    setRuns([]);
-                }
+                const btRaw = localStorage.getItem("backtestHistory");
+                const btArr: any[] = btRaw ? JSON.parse(btRaw) : [];
+                const btRuns: Run[] = Array.isArray(btArr) ? btArr.map(r => ({...r, type: 'backtest' as RunType})) : [];
+
+                const liveRaw = localStorage.getItem("runHistory");
+                const liveArr: any[] = liveRaw ? JSON.parse(liveRaw) : [];
+                const liveRuns: Run[] = Array.isArray(liveArr) ? liveArr.filter(r => r && r.type === 'mock-live') : [];
+
+                const all = [...liveRuns, ...btRuns].sort((a, b) => (new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+                setRuns(all);
             } catch {
                 setRuns([]);
             }
         }
         readHistory();
         const onStorage = (e: StorageEvent) => {
-            if (e.key === "backtestHistory") readHistory();
+            if (e.key === "backtestHistory" || e.key === 'runHistory') readHistory();
         };
         const onFocus = () => readHistory();
         window.addEventListener('storage', onStorage);
@@ -53,6 +55,7 @@ export default function HistoryPage() {
     // Handler to clear history
     const handleClearHistory = () => {
         localStorage.removeItem("backtestHistory");
+        localStorage.removeItem("runHistory");
         setRuns([]);
     };
 
@@ -75,16 +78,15 @@ export default function HistoryPage() {
             {runs.length === 0 ? (
                 <div className="rounded-xl border p-4 bg-white dark:bg-slate-800 shadow">
                     <p className="text-slate-700 dark:text-slate-300">
-                        No backtest runs saved yet.
+                        No runs saved yet.
                     </p>
                 </div>
             ) : (
                 <ul className="space-y-4">
                     {runs.map((run, i) => {
-                        console.log("run", run);
                         const tradesCount = Array.isArray(run.result?.trades)
                             ? run.result?.trades.length
-                            : run.result?.trades ?? 0;
+                            : (run.result?.trades as unknown as number) ?? 0;
                         return (
                         <li key={i} className="rounded-xl border bg-white dark:bg-slate-800 shadow">
                             <details className="group">
@@ -92,19 +94,30 @@ export default function HistoryPage() {
                                     <div className="flex items-center gap-2">
                                         <span className="transition-transform duration-200 group-open:rotate-90 text-white">▶</span>
                                         <div>
-                                            <span className="font-mono text-sm text-slate-500">
-                                                {formatDate(run.timestamp)}
-                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-mono text-sm text-slate-500">
+                                                    {formatDate(run.timestamp)}
+                                                </span>
+                                                <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full ${run.type === 'backtest' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200' : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200'}`}>
+                                                    {run.type}
+                                                </span>
+                                            </div>
                                             <div className="mt-2 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap gap-4 items-center">
                                                 {run.jobId && (
                                                     <span>
                                                         <strong>Job ID:</strong> {run.jobId}
                                                     </span>
                                                 )}
-                                                {run.backtestYears && (
+                                                {run.config?.training?.months && (run.config.training.months as any) > 0 ? (
                                                     <span>
-                                                        <strong>Backtest Years:</strong> {run.backtestYears}
+                                                        <strong>Backtest Months:</strong> {run.config.training.months}
                                                     </span>
+                                                ) : (
+                                                    run.backtestYears ? (
+                                                        <span>
+                                                            <strong>Backtest Years:</strong> {run.backtestYears}
+                                                        </span>
+                                                    ) : null
                                                 )}
                                                 {run.config?.trading?.instrument && (
                                                     <span>
@@ -123,27 +136,33 @@ export default function HistoryPage() {
                                                 )}
                                                 {run.result?.endBalance !== undefined && (
                                                     <span>
-                                                        <strong>End:</strong> {formatCurrency(run.result.endBalance)}
+                                                        <strong>End:</strong> {formatCurrency((run.result as any).endBalance)}
                                                     </span>
                                                 )}
                                             </div>
                                         </div>
                                     </div>
-                                    <span className="text-sm text-slate-700 dark:text-slate-300 ml-4 flex-shrink-0">
-                                        Trades: <strong>{tradesCount}</strong>,{" "}
-                                        Wins: <strong>{run.result?.wins ?? 0}</strong>,{" "}
-                                        Win Rate: <strong>{formatPercent(run.result?.winRate)}</strong>, Profit Factor: <strong>
-                                            <span className={
-                                                run.result?.profitFactor !== undefined
-                                                    ? run.result.profitFactor > 0
-                                                        ? "text-green-600 dark:text-green-400"
-                                                        : "text-red-600 dark:text-red-400"
-                                                    : ""
-                                            }>
-                                                {run.result?.profitFactor?.toFixed(2) ?? "—"}
-                                            </span>
-                                        </strong>
-                                    </span>
+                                    {run.type === 'backtest' ? (
+                                        <span className="text-sm text-slate-700 dark:text-slate-300 ml-4 flex-shrink-0">
+                                            Trades: <strong>{tradesCount}</strong>,{" "}
+                                            Wins: <strong>{(run.result as any)?.wins ?? 0}</strong>,{" "}
+                                            Win Rate: <strong>{formatPercent((run.result as any)?.winRate)}</strong>, Profit Factor: <strong>
+                                                <span className={
+                                                    (run.result as any)?.profitFactor !== undefined
+                                                        ? (run.result as any).profitFactor > 0
+                                                            ? "text-green-600 dark:text-green-400"
+                                                            : "text-red-600 dark:text-red-400"
+                                                        : ""
+                                                }>
+                                                    {(run.result as any)?.profitFactor?.toFixed?.(2) ?? "—"}
+                                                </span>
+                                            </strong>
+                                        </span>
+                                    ) : (
+                                        <span className="text-sm text-slate-700 dark:text-slate-300 ml-4 flex-shrink-0">
+                                            Live session (no summary). Open UI to see stream.
+                                        </span>
+                                    )}
                                 </summary>
                                 <pre className="mt-2 text-xs text-slate-700 dark:text-slate-300 overflow-x-auto bg-slate-100 dark:bg-slate-900 p-2 rounded">
                                     {JSON.stringify(run.config, null, 2)}
@@ -156,5 +175,3 @@ export default function HistoryPage() {
         </div>
     );
 }
-// (no changes here, this is just context for searchability)
-// (no changes here, this is just context for searchability)

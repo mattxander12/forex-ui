@@ -36,7 +36,6 @@ export function useBacktestStream(jobId: string, setResult: (res: (prev: Backtes
 
         source.onopen = () => {
             source._connecting = false;
-            console.log("SSE connected:", jobId);
         };
 
         source.onerror = (err) => {
@@ -189,16 +188,13 @@ export function useBacktestStream(jobId: string, setResult: (res: (prev: Backtes
         source.addEventListener('done', (ev: MessageEvent) => {
             if (cancelled) return;
             try {
-                const data = JSON.parse(ev.data);
                 mergeState({ done: true }, 'done');
                 try { source.close(); } catch {}
                 esRef.current = null;
-                console.log("Backtest stream done:", data);
             } catch {
                 mergeState({ done: true }, 'done');
                 try { source.close(); } catch {}
                 esRef.current = null;
-                console.log("Backtest stream done");
             }
         });
 

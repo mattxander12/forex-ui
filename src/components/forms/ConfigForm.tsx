@@ -1,27 +1,22 @@
 'use client';
 
-import {useCallback, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useState} from 'react';
 import clsx from 'clsx';
 import Input from "@/components/common/Input";
 import Select from "@/components/common/Select";
 import NumberInput from "@/components/common/NumberInput";
-import Toggle from "@/components/common/Toggle";
+// import Toggle from "@/components/common/Toggle";
 import {Config, FullConfig} from "@/types/config";
 import {mergeConfig} from "@/lib/configUtils";
 
 export interface ConfigFormProps {
     value: Config;
     onChangeAction: (cfg: Config) => void;
-    onTrain: () => void | Promise<void>;
-    onBacktest: () => void | Promise<void>;
     className?: string;
-    busy?: { training: boolean; backtesting: boolean };
-    runId: number;
-    onBacktestYearsChange?: (years: number) => void;
 }
 
 export default function ConfigForm({
-    value, onChangeAction, onTrain, onBacktest, className, busy, runId, onBacktestYearsChange
+    value, onChangeAction, className
 }: ConfigFormProps) {
     const rootClass = clsx(
         "max-w-5xl mx-auto mt-10 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 md:p-8",
@@ -46,12 +41,6 @@ export default function ConfigForm({
         onChangeAction(next);
     }, [cfg, onChangeAction]);
 
-    const [backtestYears, setBacktestYears] = useState<number>(1);
-    const [trainingMessage, setTrainingMessage] = useState<string | null>(null);
-    const busyObj = {
-        training: !!busy?.training,
-        backtesting: !!busy?.backtesting,
-    };
     return (
         <section className={rootClass}>
             <header className="mb-6">
@@ -68,15 +57,6 @@ export default function ConfigForm({
                     <span className="h-px flex-1 ml-4 bg-slate-200 dark:bg-slate-700"/>
                 </summary>
                 <div className="grid md:grid-cols-3 gap-4">
-                    <NumberInput
-                                 label="Training Years"
-                                 hint="History length to pull when training via UI"
-                                 value={cfg.training.years}
-                                 onChangeAction={(v) => update(c => {
-                                     c.training = c.training ?? { years: 1, valSplit: 0.2, model: 'RF', labelH: 10 };
-                                     c.training.years = v;
-                                 })}
-                    />
                     <NumberInput
                                  step={0.05}
                                  label="Validation Split"
@@ -132,9 +112,6 @@ export default function ConfigForm({
                     <span className="h-px flex-1 ml-4 bg-slate-200 dark:bg-slate-700"/>
                 </summary>
                 <div className="grid md:grid-cols-3 gap-4">
-                    <Toggle label="Paper Enabled" hint="Simulate orders instead of placing real ones"
-                            value={cfg.paper.enabled}
-                            onChangeAction={(v) => update(c => c.paper.enabled = v)}/>
                     <Select label="Mode" hint="ATR = volatility‑based stops; PIPS = fixed stop size" value={cfg.paper.mode}
                             options={['ATR', 'PIPS']}
                             onChangeAction={(v) => update(c => c.paper.mode = v as 'ATR' | 'PIPS')}/>
@@ -165,7 +142,12 @@ export default function ConfigForm({
                     />
                     <NumberInput label="Max Open/Instrument" hint="Max simultaneous paper trades per pair"
                                  value={cfg.paper.maxOpenPerInstrument}
-                                 onChangeAction={(v) => update(c => c.paper.maxOpenPerInstrument = v)}/>
+                                 integerOnly={true}
+                                 step={1}
+                                 onChangeAction={(v) => update(c => {
+                                     const n = Math.max(1, Math.round(v));
+                                     c.paper.maxOpenPerInstrument = n;
+                                 })}/>
                     <NumberInput
                         label="Starting Balance ($)"
                         hint="Used to simulate cash P&amp;L on the chart"
@@ -198,9 +180,6 @@ export default function ConfigForm({
                     <Select label="MA Type" hint="Affects features & regime filters" value={cfg.trading.maType}
                             options={['SMA', 'EMA', 'HYBRID']}
                             onChangeAction={(v) => update(c => c.trading.maType = v as 'SMA' | 'EMA' | 'HYBRID')}/>
-                    <NumberInput label="Max Spread (pips)" hint="Skip trades when current spread exceeds this value"
-                                 step={0.1} value={cfg.trading.maxSpreadPips}
-                                 onChangeAction={(v) => update(c => c.trading.maxSpreadPips = v)}/>
                 </div>
             </details>
 
@@ -242,6 +221,9 @@ export default function ConfigForm({
                                      };
                                      c.execution.commissionPips = v;
                                  })}/>
+                    <NumberInput label="Max Spread (pips)" hint="Skip trades when current spread exceeds this value"
+                                 step={0.1} value={cfg.trading.maxSpreadPips}
+                                 onChangeAction={(v) => update(c => c.trading.maxSpreadPips = v)}/>
                 </div>
             </details>
 
@@ -252,17 +234,21 @@ export default function ConfigForm({
                     <span className="h-px flex-1 ml-4 bg-slate-200 dark:bg-slate-700"/>
                 </summary>
                 <div className="grid md:grid-cols-3 gap-4">
-                    <NumberInput step={0.5} label="Max Daily Loss (R)" hint="Stop backtest for the day when breached"
+                    <NumberInput label="Max Daily Loss (R)" hint="Stop backtest for the day when breached"
                                  value={cfg.risk.maxDailyLossR}
+                                 integerOnly={true}
                                  onChangeAction={(v) => update(c => {
                                      c.risk = c.risk ?? {maxDailyLossR: 999, maxConsecLosses: 999};
-                                     c.risk.maxDailyLossR = v;
+                                     const n = Math.max(1, Math.round(v));
+                                     c.risk.maxDailyLossR = n;
                                  })}/>
                     <NumberInput label="Max Consecutive Losses" hint="Pause after N losing trades in a row"
                                  value={cfg.risk.maxConsecLosses}
+                                 integerOnly={true}
                                  onChangeAction={(v) => update(c => {
                                      c.risk = c.risk ?? {maxDailyLossR: 999, maxConsecLosses: 999};
-                                     c.risk.maxConsecLosses = v;
+                                     const n = Math.max(1, Math.round(v));
+                                     c.risk.maxConsecLosses = n;
                                  })}/>
                 </div>
             </details>
@@ -355,43 +341,9 @@ export default function ConfigForm({
 
             {/* ACTIONS sticky footer */}
             <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 py-4 px-6 flex justify-between items-center mt-10 z-10">
-                <div className="max-w-xs w-full">
-                    <NumberInput
-                        label="Backtest Years"
-                        hint="Number of years for backtest"
-                        value={backtestYears}
-                        onChangeAction={(v) => { const yrs = Math.max(v, 1); setBacktestYears(yrs); onBacktestYearsChange?.(yrs); }}
-                        step={1}
-                    />
+                <div className="max-w-md w-full grid grid-cols-2 gap-4">
                 </div>
-                <div className="flex flex-wrap gap-3 items-end">
-                    <button
-                        type="button"
-                        className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-60 disabled:cursor-not-allowed"
-                        onClick={async () => {
-                            setTrainingMessage(null);
-                            await onTrain();
-                            setTrainingMessage('✅ Training complete!');
-                        }}
-                        disabled={busyObj.training}
-                    >
-                        {busyObj.training ? 'Training…' : 'Train'}
-                    </button>
-                    <button
-                        key={runId}
-                        type="button"
-                        className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-60 disabled:cursor-not-allowed"
-                        onClick={onBacktest}
-                        disabled={busyObj.backtesting}
-                    >
-                        {busyObj.backtesting ? 'Backtesting…' : 'Backtest'}
-                    </button>
-                    {trainingMessage && (
-                        <div className="text-green-600 dark:text-green-400 mt-2 ml-2">
-                            {trainingMessage}
-                        </div>
-                    )}
-                </div>
+                <div className="flex flex-wrap gap-3 items-end"></div>
             </div>
         </section>
     );

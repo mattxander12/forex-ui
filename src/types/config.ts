@@ -9,7 +9,6 @@ export type Config = {
         maType: 'SMA' | 'EMA' | 'HYBRID';
     };
     paper: {
-        enabled: boolean;
         mode: 'ATR' | 'PIPS';
         atrPeriod: number;
         pips: number;
@@ -24,6 +23,8 @@ export type Config = {
     training?: {
         /** Years of history to use when training from the UI */
         years: number;
+        /** Optional: additional months of history; combined with years (totalMonths = years*12 + months) */
+        months?: number;
         /** Portion of data used for validation (0.2 = 20%) */
         valSplit: number;
         /** Model to train server‑side */
@@ -70,11 +71,10 @@ export const DEFAULTS: FullConfig = {
         fastSma: 20,
         slowSma: 50,
         warmup: 40,
-        maxSpreadPips: 1.0,
+        maxSpreadPips: 1.5,
         maType: 'EMA',
     },
     paper: {
-        enabled: true,
         mode: 'ATR',
         atrPeriod: 14,
         pips: 10,
@@ -87,6 +87,7 @@ export const DEFAULTS: FullConfig = {
     },
     training: {
         years: 1,
+        months: 0,
         valSplit: 0.2,
         model: 'XGBOOST',
         labelH: 20,
