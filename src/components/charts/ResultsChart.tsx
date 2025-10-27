@@ -38,9 +38,12 @@ export default function ResultsChart({
     const hasPnL = Array.isArray(data) && data.some(d => typeof d.pnl === 'number' && !Number.isNaN(d.pnl));
 
     // Build monthly ticks from data range
-    const times = data.map(d => d.xTs).filter((n) => Number.isFinite(n));
-    const minTs = times.length ? Math.min(...times) : Date.now();
-    const maxTs = times.length ? Math.max(...times) : minTs;
+    const times = data
+        .map(d => d.xTs)
+        .filter((n): n is number => Number.isFinite(n) && n > 0);
+    const defaultNow = Date.now();
+    const minTs = times.length ? Math.min(...times) : defaultNow;
+    const maxTs = times.length ? Math.max(...times) : minTs + 30 * 24 * 60 * 60 * 1000;
     // start at first day of month UTC
     const start = new Date(minTs);
     const startMonth = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1);
@@ -56,19 +59,25 @@ export default function ResultsChart({
         t = next;
     }
 
+    const uniqueTicks = Array.from(new Set(ticks)).sort((a, b) => a - b);
+    const xDomain: [number, number] = [
+        uniqueTicks.length ? uniqueTicks[0] : startMonth,
+        uniqueTicks.length ? uniqueTicks[uniqueTicks.length - 1] : Math.max(endBoundary, startMonth),
+    ];
+
     return (
         <div style={{ width: '100%', height: 440 }}>
             {/* Increase height slightly to make room for legend without overlap */}
             <ResponsiveContainer>
                 <LineChart data={data} margin={{ top: 10, right: 20, bottom: 30, left: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={true} />
+                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="2 2" vertical />
 
                     <XAxis
                         dataKey="xTs"
                         type="number"
                         scale="time"
-                        domain={[startMonth, Math.max(endBoundary, startMonth)]}
-                        ticks={ticks}
+                        domain={xDomain}
+                        ticks={uniqueTicks}
                         interval={0}
                         tick={{ fontSize: 12 }}
                         tickFormatter={(ts: number) => {

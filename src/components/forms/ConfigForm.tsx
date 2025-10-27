@@ -1,17 +1,17 @@
 'use client';
 
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useMemo} from 'react';
 import clsx from 'clsx';
 import Input from "@/components/common/Input";
 import Select from "@/components/common/Select";
 import NumberInput from "@/components/common/NumberInput";
-// import Toggle from "@/components/common/Toggle";
-import {Config, FullConfig} from "@/types/config";
+import Toggle from "@/components/common/Toggle";
+import {ConfigInput, FullConfig} from "@/types/config";
 import {mergeConfig} from "@/lib/configUtils";
 
 export interface ConfigFormProps {
-    value: Config;
-    onChangeAction: (cfg: Config) => void;
+    value: ConfigInput;
+    onChangeAction: (cfg: FullConfig) => void;
     className?: string;
 }
 
@@ -154,8 +154,17 @@ export default function ConfigForm({
                         step={100}
                         value={cfg.paper.startBalance}
                         onChangeAction={(v) => update(c => {
-                            c.paper = c.paper ?? {startBalance: 10000};
+                            c.paper = c.paper ?? {startBalance: 10000, maxSizingEquityUSD: 25000};
                             c.paper.startBalance = v;
+                        })}
+                    />
+                    <NumberInput
+                        label="Max Sizing Equity ($)"
+                        hint="Caps equity used for sizing to curb compounding"
+                        step={1000}
+                        value={cfg.paper.maxSizingEquityUSD}
+                        onChangeAction={(v) => update(c => {
+                            c.paper.maxSizingEquityUSD = Math.max(0, v);
                         })}
                     />
                 </div>
@@ -234,11 +243,17 @@ export default function ConfigForm({
                     <span className="h-px flex-1 ml-4 bg-slate-200 dark:bg-slate-700"/>
                 </summary>
                 <div className="grid md:grid-cols-3 gap-4">
+                    <Toggle label="Risk Guards Enabled" hint="When off, backtests skip drawdown-based throttles"
+                            value={cfg.risk.enabled}
+                            onChangeAction={(v) => update(c => {
+                                c.risk = c.risk ?? { enabled: true, maxDailyLossR: 3, maxConsecLosses: 5 };
+                                c.risk.enabled = v;
+                            })}/>
                     <NumberInput label="Max Daily Loss (R)" hint="Stop backtest for the day when breached"
                                  value={cfg.risk.maxDailyLossR}
                                  integerOnly={true}
                                  onChangeAction={(v) => update(c => {
-                                     c.risk = c.risk ?? {maxDailyLossR: 999, maxConsecLosses: 999};
+                                     c.risk = c.risk ?? { enabled: true, maxDailyLossR: 3, maxConsecLosses: 5 };
                                      const n = Math.max(1, Math.round(v));
                                      c.risk.maxDailyLossR = n;
                                  })}/>
@@ -246,7 +261,7 @@ export default function ConfigForm({
                                  value={cfg.risk.maxConsecLosses}
                                  integerOnly={true}
                                  onChangeAction={(v) => update(c => {
-                                     c.risk = c.risk ?? {maxDailyLossR: 999, maxConsecLosses: 999};
+                                     c.risk = c.risk ?? { enabled: true, maxDailyLossR: 3, maxConsecLosses: 5 };
                                      const n = Math.max(1, Math.round(v));
                                      c.risk.maxConsecLosses = n;
                                  })}/>

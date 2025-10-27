@@ -1,12 +1,137 @@
-import { useEffect, useRef } from 'react';
-import type {BacktestResult, Trade} from '@/types/backtest';
+import { Dispatch, SetStateAction, useEffect, useRef } from 'react';
+import type { BacktestResult, TradeLike } from '@/types/backtest';
 
 interface ExtendedEventSource extends EventSource {
     _jobId?: string;
     _connecting?: boolean;
 }
 
-export function useBacktestStream(jobId: string, setResult: (res: (prev: BacktestResult) => (BacktestResult)) => void) {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null;
+
+const toNumber = (value: unknown): number | undefined => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
+};
+
+const normalizeTrades = (raw: unknown): TradeLike[] => {
+    // Accept either a single trade object or an array of trade objects
+    const inputArray: unknown[] = Array.isArray(raw) ? raw : [raw];
+    return inputArray
+        .map((item) => (isRecord(item) ? { ...item } as TradeLike : null))
+        .filter((item): item is TradeLike => item !== null)
+        .map((trade) => {
+            const rec = trade as Record<string, unknown>;
+            const openedAt = (rec.openedAt as string | undefined) ?? (rec.opened_at as string | undefined);
+            const time = (rec.time as string | undefined) ?? (rec.time as string | undefined);
+
+            // If time is missing or clearly not a valid date string, but openedAt is valid, use openedAt for time
+            const timeParsed = typeof time === 'string' ? Date.parse(time) : NaN;
+            const openedParsed = typeof openedAt === 'string' ? Date.parse(openedAt) : NaN;
+            if ((typeof time !== 'string' || Number.isNaN(timeParsed)) && !Number.isNaN(openedParsed)) {
+                trade.time = openedAt as string;
+            }
+
+            return trade;
+        });
+};
+
+const normalizeResult = (raw: unknown): Partial<BacktestResult> => {
+    if (!isRecord(raw)) return {};
+    const output: Partial<BacktestResult> = {};
+
+    if (Array.isArray(raw.trades)) {
+        output.trades = normalizeTrades(raw.trades);
+    } else {
+        const tradesNum = toNumber(raw.trades);
+        if (typeof tradesNum === 'number') output.trades = tradesNum;
+    }
+
+    const equityCurve = raw.equityCurve ?? raw.equity_curve;
+    if (Array.isArray(equityCurve)) output.equityCurve = equityCurve.filter((n): n is number => typeof n === 'number');
+
+    const equityCurveUSD = raw.equityCurveUSD ?? raw.equity_curve_usd ?? raw.equity_usd ?? raw.balance_curve_usd;
+    if (Array.isArray(equityCurveUSD)) output.equityCurveUSD = equityCurveUSD.filter((n): n is number => typeof n === 'number');
+
+    const wins = toNumber(raw.wins);
+    if (typeof wins === 'number') output.wins = wins;
+
+    const losses = toNumber(raw.losses);
+    if (typeof losses === 'number') output.losses = losses;
+
+    const winRate = toNumber((raw as Record<string, unknown>).winRate ?? raw.win_rate);
+    if (typeof winRate === 'number') output.winRate = winRate;
+
+    const profitFactor = toNumber((raw as Record<string, unknown>).profitFactor ?? raw.profit_factor);
+    if (typeof profitFactor === 'number') output.profitFactor = profitFactor;
+
+    const avgR = toNumber((raw as Record<string, unknown>).avgR ?? raw.avg_r);
+    if (typeof avgR === 'number') output.avgR = avgR;
+
+    const totalR = toNumber((raw as Record<string, unknown>).totalR ?? raw.total_r);
+    if (typeof totalR === 'number') output.totalR = totalR;
+
+    const maxDrawdownR = toNumber((raw as Record<string, unknown>).maxDrawdownR ?? raw.max_drawdown_r ?? raw.max_drawdownR);
+    if (typeof maxDrawdownR === 'number') output.maxDrawdownR = maxDrawdownR;
+
+    const startBalance = toNumber((raw as Record<string, unknown>).startBalance ?? raw.start_balance);
+    if (typeof startBalance === 'number') output.startBalance = startBalance;
+
+    const endBalance = toNumber((raw as Record<string, unknown>).endBalance ?? raw.end_balance ?? raw.endingBalance ?? raw.ending_balance);
+    if (typeof endBalance === 'number') output.endBalance = endBalance;
+
+    return output;
+};
+
+type MergeSource = 'trade' | 'result' | 'progress' | 'done' | 'other';
+
+const mergeState =
+    (setResult: Dispatch<SetStateAction<BacktestResult | null>>) =>
+        (update: Partial<BacktestResult> & { done?: boolean; progress?: Record<string, unknown> }, from: MergeSource) => {
+            setResult((prev) => {
+                const previous = prev ?? {};
+                // Start from previous, then merge fields explicitly to avoid accidental downgrades (e.g., trades array -> number)
+                const merged: BacktestResult = { ...previous };
+
+                // Handle trades with special rules
+                if (from === 'trade' && Array.isArray(update.trades)) {
+                    const existing = Array.isArray(previous.trades) ? previous.trades : [];
+                    merged.trades = [...existing, ...update.trades];
+                } else if (from === 'result' && Array.isArray(update.trades)) {
+                    const incomingLength = update.trades.length;
+                    const previousLength = Array.isArray(previous.trades) ? previous.trades.length : 0;
+                    merged.trades = incomingLength >= previousLength ? update.trades : previous.trades;
+                } else if (update.trades !== undefined && !Array.isArray(update.trades)) {
+                    // Do not overwrite an existing array of trades with a numeric count.
+                    if (!Array.isArray(previous.trades)) {
+                        merged.trades = update.trades;
+                    }
+                }
+
+                // Merge other fields explicitly
+                if (update.equityCurve !== undefined) merged.equityCurve = update.equityCurve;
+                if (update.equityCurveUSD !== undefined) merged.equityCurveUSD = update.equityCurveUSD;
+                if (update.wins !== undefined) merged.wins = update.wins;
+                if (update.losses !== undefined) merged.losses = update.losses;
+                if (update.winRate !== undefined) merged.winRate = update.winRate;
+                if (update.profitFactor !== undefined) merged.profitFactor = update.profitFactor;
+                if (update.avgR !== undefined) merged.avgR = update.avgR;
+                if (update.totalR !== undefined) merged.totalR = update.totalR;
+                if (update.maxDrawdownR !== undefined) merged.maxDrawdownR = update.maxDrawdownR;
+                if (update.startBalance !== undefined) merged.startBalance = update.startBalance;
+                if (update.endBalance !== undefined) merged.endBalance = update.endBalance;
+                if (update.progress !== undefined) merged.progress = update.progress;
+                if (update.done !== undefined) merged.done = update.done;
+
+                return merged;
+            });
+        };
+
+export function useBacktestStream(jobId: string, setResult: Dispatch<SetStateAction<BacktestResult | null>>) {
     const esRef = useRef<ExtendedEventSource | null>(null);
 
     useEffect(() => {
@@ -34,6 +159,8 @@ export function useBacktestStream(jobId: string, setResult: (res: (prev: Backtes
         source._jobId = jobId;
         source._connecting = true;
 
+        const applyUpdate = mergeState(setResult);
+
         source.onopen = () => {
             source._connecting = false;
         };
@@ -43,124 +170,17 @@ export function useBacktestStream(jobId: string, setResult: (res: (prev: Backtes
             console.error("SSE error:", err);
         };
 
-        // Normalize helper: map snake_case and alternative keys to our BacktestResult shape
-        function normalizeResult(raw: unknown): Partial<BacktestResult> {
-            if (!raw || typeof raw !== 'object') return {};
-            const out: Partial<BacktestResult> = {};
-
-            const toNum = (x: unknown): number | undefined => {
-                if (typeof x === 'number') return Number.isFinite(x) ? x : undefined;
-                if (typeof x === 'string') {
-                    const n = Number(x);
-                    return Number.isFinite(n) ? n : undefined;
-                }
-                return undefined;
-            };
-
-            // Trades
-            if (Array.isArray((raw as any).trades)) out.trades = (raw as any).trades as any[];
-            else {
-                const t = toNum((raw as any).trades);
-                if (typeof t === 'number') out.trades = t;
-            }
-
-            // Equity curves
-            const ec = (raw as any).equityCurve ?? (raw as any).equity_curve;
-            if (Array.isArray(ec)) out.equityCurve = ec;
-            const ecUsd = (raw as any).equityCurveUSD ?? (raw as any).equity_curve_usd ?? (raw as any).equity_usd ?? (raw as any).balance_curve_usd;
-            if (Array.isArray(ecUsd)) out.equityCurveUSD = ecUsd;
-
-            // Summary metrics
-            const wins = toNum((raw as any).wins);
-            if (typeof wins === 'number') out.wins = wins;
-            const losses = toNum((raw as any).losses);
-            if (typeof losses === 'number') out.losses = losses;
-
-            const wr = toNum((raw as any).winRate ?? (raw as any).win_rate);
-            if (typeof wr === 'number') out.winRate = wr;
-
-            const pf = toNum((raw as any).profitFactor ?? (raw as any).profit_factor);
-            if (typeof pf === 'number') out.profitFactor = pf;
-
-            const avgR = toNum((raw as any).avgR ?? (raw as any).avg_r);
-            if (typeof avgR === 'number') out.avgR = avgR;
-
-            const totalR = toNum((raw as any).totalR ?? (raw as any).total_r);
-            if (typeof totalR === 'number') out.totalR = totalR;
-
-            const mddR = toNum((raw as any).maxDrawdownR ?? (raw as any).max_drawdown_r ?? (raw as any).max_drawdownR);
-            if (typeof mddR === 'number') out.maxDrawdownR = mddR;
-
-            const sb = toNum((raw as any).startBalance ?? (raw as any).start_balance);
-            if (typeof sb === 'number') out.startBalance = sb;
-
-            const eb = toNum((raw as any).endBalance ?? (raw as any).end_balance ?? (raw as any).endingBalance ?? (raw as any).ending_balance);
-            if (typeof eb === 'number') out.endBalance = eb;
-
-            return out;
-        }
-
-        // Merge helper
-        function mergeState(
-            update: Partial<BacktestResult> & { done?: boolean; progress?: unknown },
-            from: 'trade' | 'result' | 'progress' | 'done' | string = 'other'
-        ) {
-            setResult((prev: BacktestResult) => {
-                if (!prev) {
-                    const initial: BacktestResult = { ...update };
-                    if (!initial.trades) initial.trades = [];
-                    return initial;
-                }
-                const merged: BacktestResult = { ...prev, ...update };
-                if (from === 'trade') {
-                    if (Array.isArray(update.trades)) {
-                        merged.trades = [
-                            ...(Array.isArray(prev.trades) ? prev.trades : []),
-                            ...update.trades
-                        ];
-                    } else {
-                        // If trades is not an array (could be number or undefined), just keep previous trades
-                        merged.trades = prev.trades || [];
-                    }
-                } else if (from === 'result') {
-                    if (Array.isArray(update.trades)) {
-                        const tradesArray = update.trades as Trade[];
-                        merged.trades = tradesArray.length > ((Array.isArray(prev.trades) ? prev.trades.length : 0))
-                            ? tradesArray
-                            : prev.trades;
-                    } else {
-                        // If trades is a number or undefined, keep previous trades
-                        merged.trades = prev.trades;
-                    }
-                }
-                if (Object.prototype.hasOwnProperty.call(update, "equityCurve") && update.equityCurve !== undefined) {
-                    merged.equityCurve = update.equityCurve;
-                }
-                return merged;
-            });
-        }
-
         // Event listeners
         source.addEventListener('trade', (ev: MessageEvent) => {
             if (cancelled) return;
             try {
                 const data = JSON.parse(ev.data);
-                const arr = Array.isArray(data) ? data : [data];
-                const trades = arr.map((t: unknown) => {
-                    const tt: Record<string, unknown> = { ...(t as Record<string, unknown>) };
-                    const openedAt = tt.openedAt ?? tt.opened_at ?? null;
-                    const timeStr: string | undefined = tt.time;
-                    const parsed = timeStr ? Date.parse(timeStr) : NaN;
-                    if ((!timeStr || Number.isNaN(parsed)) && openedAt) {
-                        tt.time = openedAt;
-                    }
-                    return tt;
-                });
-                mergeState({ trades }, 'trade');
+                const trades = normalizeTrades(data);
+                applyUpdate({ trades }, 'trade');
             } catch {}
         });
 
-        source.addEventListener('heartbeat', (_ev: MessageEvent) => {
+        source.addEventListener('heartbeat', () => {
             if (cancelled) return;
             // no-op heartbeat to keep connection alive
         });
@@ -170,9 +190,10 @@ export function useBacktestStream(jobId: string, setResult: (res: (prev: Backtes
             try {
                 const data = JSON.parse(ev.data);
                 const normalized = normalizeResult(data);
-                const update = { ...normalized, progress: data } as Partial<BacktestResult> & { progress: unknown };
+                const progressPayload = isRecord(data) ? data : undefined;
+                const update = { ...normalized, progress: progressPayload };
                 // other fields like leverage are kept within progress only
-                mergeState(update, 'progress');
+                applyUpdate(update, 'progress');
             } catch {}
         });
 
@@ -181,18 +202,15 @@ export function useBacktestStream(jobId: string, setResult: (res: (prev: Backtes
             try {
                 const data = JSON.parse(ev.data);
                 const normalized = normalizeResult(data);
-                mergeState(normalized, 'result');
+                applyUpdate(normalized, 'result');
             } catch {}
         });
 
-        source.addEventListener('done', (ev: MessageEvent) => {
+        source.addEventListener('done', () => {
             if (cancelled) return;
             try {
-                mergeState({ done: true }, 'done');
-                try { source.close(); } catch {}
-                esRef.current = null;
-            } catch {
-                mergeState({ done: true }, 'done');
+                applyUpdate({ done: true }, 'done');
+            } finally {
                 try { source.close(); } catch {}
                 esRef.current = null;
             }
@@ -205,7 +223,7 @@ export function useBacktestStream(jobId: string, setResult: (res: (prev: Backtes
             try { source.close(); } catch {}
             esRef.current = null;
         };
-    }, [jobId]);
+    }, [jobId, setResult]);
 
     // No return value, result is managed by provided setter
 }

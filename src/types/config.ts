@@ -18,6 +18,7 @@ export type Config = {
         leverage: number;
         stopAtrMulti: number;
         startBalance: number;
+        maxSizingEquityUSD: number;
     };
     /** Optional fine‑tuning knobs (safe defaults used if undefined) */
     training?: {
@@ -41,6 +42,8 @@ export type Config = {
         commissionPips: number;
     };
     risk?: {
+        /** Toggle risk throttling on or off */
+        enabled: boolean;
         /** Max daily drawdown in R before stopping */
         maxDailyLossR: number;
         /** Max consecutive losses before pausing */
@@ -64,6 +67,8 @@ export type Config = {
 
 export type FullConfig = Required<Config>;
 
+export type ConfigInput = Partial<Config>;
+
 export const DEFAULTS: FullConfig = {
     trading: {
         instrument: 'USD_JPY',
@@ -71,7 +76,7 @@ export const DEFAULTS: FullConfig = {
         fastSma: 20,
         slowSma: 50,
         warmup: 40,
-        maxSpreadPips: 1.5,
+        maxSpreadPips: 1.7,
         maType: 'EMA',
     },
     paper: {
@@ -79,11 +84,12 @@ export const DEFAULTS: FullConfig = {
         atrPeriod: 14,
         pips: 10,
         rr: 2.0,
-        risk: 1,
+        risk: 0.65,
         maxOpenPerInstrument: 1,
         leverage: 50,
         stopAtrMulti: 1,
         startBalance: 10000,
+        maxSizingEquityUSD: 180000,
     },
     training: {
         years: 1,
@@ -93,13 +99,14 @@ export const DEFAULTS: FullConfig = {
         labelH: 20,
     },
     execution: {
-        signalThreshold: 0.55,
-        slippagePips: 0.2,
+        signalThreshold: 0.63,
+        slippagePips: 0.4,
         commissionPips: 0,
     },
     risk: {
-        maxDailyLossR: 3,
-        maxConsecLosses: 5,
+        enabled: true,
+        maxDailyLossR: 4,
+        maxConsecLosses: 3,
     },
     filter: {
         evMargin: 0.12,

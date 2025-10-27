@@ -1,10 +1,10 @@
-import type { Config } from '@/types/config';
+import type { ConfigInput } from '@/types/config';
 import { mergeConfig } from '@/lib/configUtils';
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 const VERSION = process.env.NEXT_PUBLIC_API_VERSION ?? '';
 
-export async function train(config: Config) {
+export async function train(config: ConfigInput) {
     const res = await fetch(`${BASE}/${VERSION}/train`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -15,7 +15,7 @@ export async function train(config: Config) {
     return res.json();
 }
 
-export async function backtest(config: Config) {
+export async function backtest(config: ConfigInput) {
     const res = await fetch(`${BASE}/${VERSION}/backtest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -26,7 +26,7 @@ export async function backtest(config: Config) {
     return res.json();
 }
 
-export async function applyConfig(config: Config) {
+export async function applyConfig(config: ConfigInput) {
     const res = await fetch(`${BASE}/${VERSION}/config/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

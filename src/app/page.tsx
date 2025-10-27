@@ -1,13 +1,14 @@
 'use client';
 
 import React, {useState, useEffect, useRef} from 'react';
+import clsx from 'clsx';
 import ConfigForm from '@/components/forms/ConfigForm';
-import {Config, DEFAULTS, FullConfig} from '@/types/config';
+import {ConfigInput, DEFAULTS, FullConfig} from '@/types/config';
 import { mergeConfig } from '@/lib/configUtils';
 import { applyConfig as applyConfigApi } from '@/services/api';
 
 export default function Page() {
-    const [value, setValue] = useState<Config>(DEFAULTS);
+    const [value, setValue] = useState<FullConfig>(DEFAULTS);
     const [loaded, setLoaded] = useState(false);
 
     // Load initial config from localStorage if present, then mark hydrated
@@ -15,9 +16,9 @@ export default function Page() {
         try {
             const raw = localStorage.getItem('app.config');
             if (raw) {
-                const parsed = JSON.parse(raw);
+                const parsed = JSON.parse(raw) as unknown;
                 if (parsed && typeof parsed === 'object') {
-                    setValue(parsed as Config);
+                    setValue(mergeConfig(parsed as ConfigInput));
                 }
             }
         } catch {}
@@ -35,11 +36,32 @@ export default function Page() {
     }, [value, loaded]);
 
 
+    const [toast, setToast] = useState<{ id: number; message: string } | null>(null);
+    const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (toastTimerRef.current) {
+                clearTimeout(toastTimerRef.current);
+            }
+        };
+    }, []);
+
+    const showToast = (message: string, durationMs = 2200) => {
+        if (toastTimerRef.current) {
+            clearTimeout(toastTimerRef.current);
+        }
+        setToast({ id: Date.now(), message });
+        toastTimerRef.current = setTimeout(() => {
+            setToast(null);
+            toastTimerRef.current = null;
+        }, durationMs);
+    };
+
     const onApplyConfig = async () => {
         try {
             await applyConfigApi(value);
-            // Optionally provide lightweight feedback
-            console.log('Config applied');
+            showToast('Config applied!');
         } catch (e) {
             console.error(e);
             alert('Failed to apply config: ' + (e as Error).message);
@@ -51,6 +73,16 @@ export default function Page() {
 
     return (
         <>
+            {toast && (
+                <div className="fixed top-6 right-6 z-30">
+                    <div className={clsx(
+                        'rounded-lg px-4 py-3 shadow-lg text-sm font-medium transition-opacity',
+                        'bg-slate-900 text-white'
+                    )}>
+                        {toast.message}
+                    </div>
+                </div>
+            )}
             <div className="max-w-5xl mx-auto mt-6 flex items-center justify-end gap-2">
                 <button
                     type="button"

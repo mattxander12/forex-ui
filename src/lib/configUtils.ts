@@ -1,14 +1,15 @@
-import { Config, FullConfig, DEFAULTS } from '@/types/config';
+import { ConfigInput, FullConfig, DEFAULTS } from '@/types/config';
 
-export function mergeConfig(value: Config): FullConfig {
+export function mergeConfig(value?: ConfigInput): FullConfig {
+    const cfg: ConfigInput = value ?? {};
     return {
         ...DEFAULTS,
-        ...value,
-        trading: { ...DEFAULTS.trading, ...value.trading },
-        paper: { ...DEFAULTS.paper, ...value.paper },
-        training: { ...DEFAULTS.training, ...(value.training ?? {}) },
-        execution: { ...DEFAULTS.execution, ...(value.execution ?? {}) },
-        risk: { ...DEFAULTS.risk, ...(value.risk ?? {}) },
-        filter: { ...DEFAULTS.filter, ...(value.filter ?? {}) },
+        ...cfg,
+        trading: { ...DEFAULTS.trading, ...(cfg.trading ?? {}) },
+        paper: { ...DEFAULTS.paper, ...(cfg.paper ?? {}) },
+        training: { ...DEFAULTS.training, ...(cfg.training ?? {}) },
+        execution: { ...DEFAULTS.execution, ...(cfg.execution ?? {}) },
+        risk: { ...DEFAULTS.risk, ...(cfg.risk ?? {}) },
+        filter: { ...DEFAULTS.filter, ...(cfg.filter ?? {}) },
     };
 }
